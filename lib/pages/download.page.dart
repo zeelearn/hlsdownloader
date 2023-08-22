@@ -1,17 +1,14 @@
 import 'dart:math';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:get/get.dart';
-import 'package:flutter/material.dart';
-import 'package:hlsd/helpers/download_queue.dart';
-import 'package:provider/provider.dart';
-import 'package:typeweight/typeweight.dart';
 import 'package:google_fonts/google_fonts.dart';
-
-import 'package:hlsd/helpers/helpers.dart';
-import 'package:hlsd/database/database.dart';
 import 'package:hlsd/components/action_button.dart';
+import 'package:hlsd/database/database.dart';
+import 'package:hlsd/helpers/helpers.dart';
 import 'package:hlsd/helpers/no_scrollglow_behavior.dart';
+import 'package:typeweight/typeweight.dart';
 
 class DownloadPage extends StatefulWidget {
   @override
@@ -41,7 +38,7 @@ class _DownloadPageState extends State<DownloadPage> {
 
   @override
   Widget build(BuildContext context) {
-    final db = Provider.of<AppDatabase>(context);
+    // final db = Provider.of<AppDatabase>(context);
     return GestureDetector(
       onTap: () {
         FocusScope.of(context).requestFocus(FocusNode());
@@ -167,17 +164,18 @@ class _DownloadPageState extends State<DownloadPage> {
                               onPressed: () async {
                                 final url = quality;
 
-                                var currentRecord = (await db.getAllRecord())
-                                    .where((r) => r.url == url);
+                                var currentRecord =
+                                    (await AppDatabase().getAllRecord())
+                                        .where((r) => r.url == url);
 
-                                if (currentRecord.isEmpty) {
-                                  int id = await db.insertNewRecord(
-                                    Record(
-                                        url: url!,
-                                        downloaded: 0,
-                                        id: Random.secure().nextInt(10000)),
-                                  );
-                                  /* await load(
+                                // if (currentRecord.isEmpty) {
+                                int id = await AppDatabase().insertNewRecord(
+                                  Record(
+                                      url: url!,
+                                      downloaded: 0,
+                                      id: Random.secure().nextInt(10000)),
+                                );
+                                /* await load(
                                     url,
                                     (p0) {
                                       debugPrint(
@@ -185,19 +183,19 @@ class _DownloadPageState extends State<DownloadPage> {
                                     },
                                   ); */
 
-                                  Get.back();
+                                final service = FlutterBackgroundService();
+                                // var isRunning = await service.isRunning();
+                                // if (isRunning) {
+                                //   service.invoke('stopService');
+                                // } else {
+                                await service.startService();
+                                service
+                                    .invoke('download', {'url': url, 'id': id});
 
-                                  final service = FlutterBackgroundService();
-                                  // var isRunning = await service.isRunning();
-                                  // if (isRunning) {
-                                  //   service.invoke('stopService');
-                                  // } else {
-                                  await service.startService();
-                                  service.invoke(
-                                      'download', {'url': url, 'id': id});
-                                  // }
+                                Get.back();
+                                // }
 
-                                  FlutterBackgroundService()
+                                /*              FlutterBackgroundService()
                                       .on('update')
                                       .listen(
                                     (event) async* {
@@ -209,25 +207,33 @@ class _DownloadPageState extends State<DownloadPage> {
                                             url: url,
                                             downloaded: event['progress']));
                                       }
-                                      if (event['done'] == true) {
-                                        DownloadQueue.add(
-                                            () => event['responseurl']);
-                                      }
+                                      // if (event['done'] == true) {
+                                      //   DownloadQueue.add(
+                                      //       () => event['responseurl']);
+                                      // }
                                     },
                                     /* onDone: () async {
                                       await db.updateRecord(Record(
                                           id: id, url: url, downloaded: 100));
                                     }, */
-                                  );
+                                  ); */
 
-                                  /*  await Workmanager().registerOneOffTask(
+                                /*  await Workmanager().registerOneOffTask(
                                     '1',
                                     'Download',
                                     inputData: {'url': url, 'id': id},
                                   ).then((value) {
                                     debugPrint('response from background');
                                   }); */
-                                }
+                                // } else {
+                                //   var currentRecord =
+                                //       (await AppDatabase().getAllRecord())
+                                //           .where((r) => r.url == url);
+
+                                //   currentRecord.forEach((element) {
+                                //     debugPrint('Current record is - $element');
+                                //   });
+                                // }
                               },
                               child: Text(
                                 'Download',

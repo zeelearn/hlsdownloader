@@ -1,4 +1,0 @@
-
-// class BackgroundWorker extends Worker{
-
-// }

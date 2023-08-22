@@ -1,18 +1,16 @@
 import 'dart:collection';
 import 'dart:io';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:get/get.dart';
-import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:provider/provider.dart';
-import 'package:typeweight/typeweight.dart';
-
-import 'package:hlsd/pages/pages.dart';
-import 'package:hlsd/database/database.dart';
-import 'package:hlsd/helpers/helpers.dart';
-import 'package:hlsd/helpers/download_queue.dart';
 import 'package:hlsd/components/action_button.dart';
+import 'package:hlsd/database/database.dart';
+import 'package:hlsd/helpers/download_queue.dart';
+import 'package:hlsd/helpers/helpers.dart';
+import 'package:hlsd/pages/pages.dart';
+import 'package:typeweight/typeweight.dart';
 
 class DownloadsPage extends StatefulWidget {
   @override
@@ -22,11 +20,15 @@ class DownloadsPage extends StatefulWidget {
 class _DownloadsPageState extends State<DownloadsPage> {
   List<File> downloadedFiles = [];
   Future<void> getDownloadedFiles() async {
-    final appDocDir = await getApplicationDocumentsDirectory();
+    final appDocDir = await getDirectory();
     final fileEntities = appDocDir.listSync();
 
-    downloadedFiles =
-        fileEntities.whereType<File>().map((entity) => entity).toList();
+    downloadedFiles = fileEntities
+        .whereType<File>()
+        .map(
+          (e) => e,
+        )
+        .toList();
 
     setState(() {});
   }
@@ -39,9 +41,9 @@ class _DownloadsPageState extends State<DownloadsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final db = Provider.of<AppDatabase>(context);
+    // final db = Provider.of<AppDatabase>(context);
     final downloadStream = DownloadQueue.load();
-    final dbStream = db.watchAllRecord();
+    final dbStream = AppDatabase().watchAllRecord();
 
     return StreamBuilder(
       stream: downloadStream,
@@ -57,25 +59,25 @@ class _DownloadsPageState extends State<DownloadsPage> {
           DownloadQueue.execute(queue);
 
           if (snapshot.data != null) {
-            db.deleteUncompleteDownloads();
+            AppDatabase().deleteUncompleteDownloads();
           }
         }
         return StreamBuilder<Map<String, dynamic>?>(
             stream: FlutterBackgroundService().on('update'),
             builder: (context, snapshot) {
               debugPrint('onupdate is getting called - ${snapshot.data}');
-              if (snapshot.hasData) {
-                if (snapshot.data!['done'] == false) {
-                  db.updateRecord(Record(
-                      id: snapshot.data!['id'],
-                      url: snapshot.data!['url'],
-                      downloaded:
-                          double.parse(snapshot.data!['progress'].toString())));
-                }
-                // if (snapshot.data!['done'] == true) {
-                //   DownloadQueue.add(() => snapshot.data!['responseurl']);
-                // }
-              }
+              // if (snapshot.hasData) {
+              //   if (snapshot.data!['done'] == false) {
+              //     AppDatabase().updateRecord(Record(
+              //         id: int.parse(snapshot.data!['id'].toString()),
+              //         url: snapshot.data!['url'],
+              //         downloaded:
+              //             double.parse(snapshot.data!['progress'].toString())));
+              //   }
+              //   // if (snapshot.data!['done'] == true) {
+              //   //   DownloadQueue.add(() => snapshot.data!['responseurl']);
+              //   // }
+              // }
               return Scaffold(
                 appBar: AppBar(
                   title: Text(
@@ -100,8 +102,9 @@ class _DownloadsPageState extends State<DownloadsPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const SizedBox(height: 16),
-                    Expanded(
+                    Flexible(
                       child: ListView.builder(
+                        shrinkWrap: true,
                         itemCount: downloadedFiles.length,
                         itemBuilder: (context, index) {
                           return InkWell(
@@ -120,7 +123,7 @@ class _DownloadsPageState extends State<DownloadsPage> {
                       ),
                     ),
                     StreamBuilder(
-                      stream: dbStream,
+                      stream: AppDatabase().watchAllRecord(),
                       builder: (context, AsyncSnapshot<List<Record>> snapshot) {
                         if (!snapshot.hasData || snapshot.data!.isEmpty) {
                           return Center(
@@ -154,67 +157,133 @@ class _DownloadsPageState extends State<DownloadsPage> {
                                       ),
                                     ),
                                   ),
-                                  child: ListTile(
-                                    enabled: record.downloaded >= 100,
-                                    onTap: () async {
-                                      final loc =
-                                          await findFileLocation(record.url);
+                                  child: record.downloaded >= 100
+                                      ? ListTile(
+                                          enabled: record.downloaded >= 100,
+                                          onTap: () async {
+                                            final loc = await findFileLocation(
+                                                record.url);
 
-                                      // print(await Directory(
-                                      //         '/data/user/0/com.example.download_hls_flutter/app_flutter/')
-                                      //     .delete(recursive: true));
+                                            // print(await Directory(
+                                            //         '/data/user/0/com.example.download_hls_flutter/app_flutter/')
+                                            //     .delete(recursive: true));
 
-                                      await Get.to(VideoPlayerPage(loc));
-                                    },
-                                    contentPadding: const EdgeInsets.all(
-                                      NavigationToolbar.kMiddleSpacing,
-                                    ),
-                                    title: Text(getFilePath(record.url)),
-                                    isThreeLine: true,
-                                    subtitle: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        SizedBox(
-                                            height: NavigationToolbar
-                                                    .kMiddleSpacing /
-                                                2),
-                                        Text(stripFilePath(record.url)),
-                                        SizedBox(
-                                            height: NavigationToolbar
-                                                    .kMiddleSpacing /
-                                                2),
-                                        (record.downloaded < 100)
-                                            ? Text(
-                                                'Downloading...${record.downloaded.toStringAsFixed(1)}%',
-                                                style: GoogleFonts.ubuntuMono(
-                                                  color: Colors.indigoAccent,
-                                                ),
-                                              )
-                                            : Text(
-                                                'Downloaded',
+                                            await Get.to(VideoPlayerPage(loc));
+                                          },
+                                          contentPadding: const EdgeInsets.all(
+                                            NavigationToolbar.kMiddleSpacing,
+                                          ),
+                                          title: Text(getFilePath(record.url)),
+                                          isThreeLine: true,
+                                          subtitle: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              SizedBox(
+                                                  height: NavigationToolbar
+                                                          .kMiddleSpacing /
+                                                      2),
+                                              Text(stripFilePath(record.url)),
+                                              SizedBox(
+                                                  height: NavigationToolbar
+                                                          .kMiddleSpacing /
+                                                      2),
+                                              (record.downloaded < 100)
+                                                  ? Text(
+                                                      'Downloading...${record.downloaded.toStringAsFixed(1)}%',
+                                                      style: GoogleFonts
+                                                          .ubuntuMono(
+                                                        color:
+                                                            Colors.indigoAccent,
+                                                      ),
+                                                    )
+                                                  : Text(
+                                                      'Downloaded',
+                                                      style: GoogleFonts
+                                                          .ubuntuMono(
+                                                        color:
+                                                            Colors.indigoAccent,
+                                                      ),
+                                                    ),
+                                            ],
+                                          ),
+                                          trailing: Visibility(
+                                            visible: record.downloaded >= 100,
+                                            child: IconButton(
+                                              icon: Icon(Icons.delete),
+                                              onPressed: () async {
+                                                debugPrint(
+                                                    'url path is - ${record.url}');
+                                                final loc =
+                                                    await findFileLocation(
+                                                        record.url);
+
+                                                debugPrint(
+                                                    'deletion path is - ${record.url}');
+
+                                                await Directory(
+                                                        normalizeUrl(loc))
+                                                    .delete(recursive: true);
+
+                                                print('DELETED.');
+                                                await AppDatabase()
+                                                    .deleteRecord(record);
+                                                setState(() {});
+                                              },
+                                            ),
+                                          ),
+                                        )
+                                      : ListTile(
+                                          enabled: true,
+                                          onTap: () async {},
+                                          contentPadding: const EdgeInsets.all(
+                                            NavigationToolbar.kMiddleSpacing,
+                                          ),
+                                          title: Text(getFilePath(record.url)),
+                                          isThreeLine: true,
+                                          subtitle: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              SizedBox(
+                                                  height: NavigationToolbar
+                                                          .kMiddleSpacing /
+                                                      2),
+                                              Text(stripFilePath(record.url)),
+                                              SizedBox(
+                                                  height: NavigationToolbar
+                                                          .kMiddleSpacing /
+                                                      2),
+                                              Text(
+                                                'Resume...${record.downloaded.toStringAsFixed(1)}%',
                                                 style: GoogleFonts.ubuntuMono(
                                                   color: Colors.indigoAccent,
                                                 ),
                                               ),
-                                      ],
-                                    ),
-                                    trailing: Visibility(
-                                      visible: record.downloaded >= 100,
-                                      child: ActionButton(
-                                        icon: Icon(Icons.delete),
-                                        onPressed: () async {
-                                          final loc = await findFileLocation(
-                                              record.url);
-                                          await Directory(normalizeUrl(loc))
-                                              .delete(recursive: true);
+                                            ],
+                                          ),
+                                          trailing: ActionButton(
+                                            icon: Icon(Icons.delete),
+                                            onPressed: () async {
+                                              debugPrint(
+                                                  'url path is - ${record.url}');
+                                              final loc =
+                                                  await findFileLocation(
+                                                      record.url);
 
-                                          print('DELETED.');
-                                          await db.deleteRecord(record);
-                                        },
-                                      ),
-                                    ),
-                                  ),
+                                              debugPrint(
+                                                  'deletion path is - ${record.url}');
+
+                                              await Directory(normalizeUrl(loc))
+                                                  .delete(recursive: true);
+
+                                              print('DELETED.');
+                                              await AppDatabase()
+                                                  .deleteRecord(record);
+                                              setState(() {});
+                                            },
+                                          ),
+                                        ),
                                 );
                               },
                             ),

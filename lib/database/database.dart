@@ -10,13 +10,24 @@ class Records extends Table {
 
 @UseMoor(tables: [Records])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase()
+  AppDatabase._privateConstructor()
       : super(
           FlutterQueryExecutor.inDatabaseFolder(
             path: 'downloads.sqlite',
             logStatements: true,
           ),
         );
+  static AppDatabase? _instance;
+
+  factory AppDatabase() => _instance ??= AppDatabase._privateConstructor();
+
+  // AppDatabase()
+  //     : super(
+  //         FlutterQueryExecutor.inDatabaseFolder(
+  //           path: 'downloads.sqlite',
+  //           logStatements: true,
+  //         ),
+  //       );
 
   @override
   int get schemaVersion => 1;

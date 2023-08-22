@@ -1,14 +1,23 @@
+import 'dart:async';
+import 'dart:developer';
 import 'dart:io';
-import 'package:path/path.dart' as p;
-import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
+
+// import 'package:http/http.dart' as http;
+import 'package:cancellation_token_http/http.dart' as http;
 import 'package:flutter_hls_parser/flutter_hls_parser.dart';
+import 'package:http/http.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+
+Future<Directory> getDirectory() {
+  return getApplicationCacheDirectory();
+}
 
 /// returns downloaded file path from url
 Future<String> findFileLocation(String url) async {
   final hash = url.hashCode.toString();
   final filePath = getFilePath(url);
-  final appDocDir = await getApplicationDocumentsDirectory();
+  final appDocDir = await getDirectory();
   final file = File(p.join(appDocDir.path, hash, filePath));
   return file.absolute.path;
 }
@@ -56,26 +65,50 @@ List<String> pathSegments(String url) {
   return segments.sublist(0, segments.length - 1);
 }
 
-/// downloads a file from [url] to [filepath]/[filename]
-Future<File> downloadFile(String url, String filepath, String filename) async {
-  final client = http.Client();
-  final req = await client.get(Uri.parse(url));
-  final bytes = req.bodyBytes;
-  final file = File('$filepath/$filename');
+late StreamedRequest request;
+late StreamSubscription<List<int>> streamSubscription;
+bool isDownloading = false;
+final client = http.Client();
+Future<File?> downloadFile(String url, String filepath, String filename,
+    http.CancellationToken token) async {
+  /*  InternetConnectionChecker().onStatusChange.listen((status) {
+    switch (status) {
+      case InternetConnectionStatus.connected:
+        print('Data connection is available.');
 
-  for (final f in pathSegments(filename)) {
-    final d = Directory(p.join(filepath, f));
-    if (!await d.exists()) {
-      await d.create();
+        break;
+      case InternetConnectionStatus.disconnected:
+        print('You are disconnected from the internet.');
+        client.close();
+        break;
     }
-  }
+  }); */
 
-  if (!file.existsSync()) {
-    await file.create(recursive: true);
-  }
+  try {
+    final req = await client.get(Uri.parse(url), cancellationToken: token);
 
-  await file.writeAsBytes(bytes);
-  return file;
+    log('api call is canceled - ${token.isCancelled}');
+
+    final bytes = req.bodyBytes;
+    final file = File('$filepath/$filename');
+
+    for (final f in pathSegments(filename)) {
+      final d = Directory(p.join(filepath, f));
+      if (!await d.exists()) {
+        await d.create();
+      }
+    }
+
+    if (!file.existsSync()) {
+      await file.create(recursive: true);
+    }
+
+    await file.writeAsBytes(bytes);
+    return file;
+  } on Exception catch (e) {
+    log('api call is cancelled - $e');
+    return null;
+  }
 }
 
 Future<List<Segment>> getHlsMediaFiles(Uri uri, List<String> lines) async {
@@ -126,12 +159,13 @@ Future<Map> loadFileMetadata(String url) async {
 }
 
 /// download file from [url] and returns downloaded file path
-Future<String> load(String url, Function(double) progress) async {
+Future<String?> load(
+    String url, http.CancellationToken token, Function(double) progress) async {
   // the file path without full url
   final filename = getFilePath(url);
 
   // the app's directory to store data
-  final appDocDir = await getApplicationDocumentsDirectory();
+  final appDocDir = await getDirectory();
 
   // directory to download files
   final downloadDir = Directory(p.join(
@@ -145,9 +179,12 @@ Future<String> load(String url, Function(double) progress) async {
 
   // the full directory + filename path to download
   final filepath = p.join(downloadDir.path, filename);
-  var file = File(filepath);
+  File? file = File(filepath);
   if (!await file.exists()) {
-    file = await downloadFile(url, downloadDir.path, filename);
+    file = await downloadFile(url, downloadDir.path, filename, token);
+    if (file == null) {
+      return null;
+    }
   }
 
   final lines = await file.readAsLines();
@@ -168,14 +205,17 @@ Future<String> load(String url, Function(double) progress) async {
       seg.url,
     );
 
-    // print('urlToDownload');
+    print('urlToDownload $urlToDownload');
     // print(urlToDownload);
 
     // application's file to download into
-    var ff = File(p.join(downloadDir.path, seg.url));
+    File? ff = File(p.join(downloadDir.path, seg.url));
 
     if (!await ff.exists()) {
-      await downloadFile(urlToDownload, downloadDir.path, seg.url!);
+      ff = await downloadFile(urlToDownload, downloadDir.path, seg.url!, token);
+      if (ff == null) {
+        return null;
+      }
     }
 
     if (index != total - 1) {

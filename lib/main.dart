@@ -1,16 +1,18 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:developer';
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:cancellation_token_http/http.dart' as http;
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:get/get.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 import 'package:hlsd/database/database.dart';
-import 'package:workmanager/workmanager.dart';
+import 'package:provider/provider.dart';
 
 import 'helpers/download_queue.dart';
 import 'helpers/helpers.dart';
@@ -64,15 +66,44 @@ const String darwinNotificationCategoryText = 'textCategory';
 const String darwinNotificationCategoryPlain = 'plainCategory';
 
 @pragma('vm:entry-point')
-void notificationTapBackground(NotificationResponse notificationResponse) {
+void notificationTapBackground(
+    NotificationResponse notificationResponse) async {
   // ignore: avoid_print
-  print('notification(${notificationResponse.id}) action tapped: '
+  log('notification(${notificationResponse.id}) action tapped: '
       '${notificationResponse.actionId} with'
       ' payload: ${notificationResponse.payload}');
-  if (notificationResponse.input?.isNotEmpty ?? false) {
-    // ignore: avoid_print
-    print(
-        'notification action tapped with input: ${notificationResponse.input}');
+  var url = jsonDecode(notificationResponse.payload!)['url'];
+  var id = jsonDecode(notificationResponse.payload!)['id'];
+  debugPrint('data coming from payload is - $url and id is - $id');
+  if (notificationResponse.actionId == 'id_3') {
+    final service = FlutterBackgroundService();
+    debugPrint('Download  is canceled notificationTapBackground');
+    if (!await service.isRunning()) {
+      var serviceStatus = await service.startService();
+    }
+    if (await service.isRunning()) {
+      service.invoke('cancelDownload', {'url': url, 'id': id});
+    }
+  } else if (notificationResponse.actionId == 'id_2') {
+    final service = FlutterBackgroundService();
+    if (!await service.isRunning()) {
+      var serviceStatus = await service.startService();
+    }
+    debugPrint('Download is paused notificationTapBackground');
+    if (await service.isRunning()) {
+      service.invoke('pauseDownload', {'url': url, 'id': id});
+    }
+  } else if (notificationResponse.actionId == 'id_1') {
+    final service = FlutterBackgroundService();
+    if (!await service.isRunning()) {
+      var serviceStatus = await service.startService();
+    }
+    debugPrint('resume button is clicked notificationTapBackground');
+    if (await service.isRunning()) {
+      service.invoke('download', {'url': url, 'id': id});
+    } else {
+      log('service is not running');
+    }
   }
 }
 
@@ -80,11 +111,11 @@ StreamController<int>? progressStream;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Workmanager().initialize(
-      callbackDispatcher, // The top level function, aka callbackDispatcher
-      isInDebugMode:
-          true // If enabled it will post a notification whenever the task is running. Handy for debugging tasks
-      );
+  // await Workmanager().initialize(
+  //     callbackDispatcher, // The top level function, aka callbackDispatcher
+  //     isInDebugMode:
+  //         true // If enabled it will post a notification whenever the task is running. Handy for debugging tasks
+  //     );
   await initializeService();
 
   // final notificationAppLaunchDetails = !kIsWeb && Platform.isLinux
@@ -177,7 +208,7 @@ void main() async {
     initializationSettings,
     onDidReceiveNotificationResponse:
         (NotificationResponse notificationResponse) {
-      switch (notificationResponse.notificationResponseType) {
+      /* switch (notificationResponse.notificationResponseType) {
         case NotificationResponseType.selectedNotification:
           selectNotificationStream.add(notificationResponse.payload);
           break;
@@ -186,7 +217,14 @@ void main() async {
             selectNotificationStream.add(notificationResponse.payload);
           }
           break;
-      }
+      } */
+      // if (notificationResponse.actionId == 'id_3') {
+      //   debugPrint('Download is canceled');
+      // } else if (notificationResponse.actionId == 'id_2') {
+      //   debugPrint('Download is paused');
+      // } else if (notificationResponse.actionId == 'id_1') {
+      //   debugPrint('resume button is clicked');
+      // }
     },
     onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
   );
@@ -224,35 +262,35 @@ class Mainframe extends StatelessWidget {
   }
 }
 
-@pragma(
-    'vm:entry-point') // Mandatory if the App is obfuscated or using Flutter 3.1+
-void callbackDispatcher() async {
-  Workmanager().executeTask((task, inputData) async {
-    final db = Provider.of<AppDatabase>(Mainframe.navigatorKey.currentContext!,
-        listen: false);
-    var url = inputData!['url'];
-    var videoUrl = inputData['videoUrl'];
+// @pragma(
+//     'vm:entry-point') // Mandatory if the App is obfuscated or using Flutter 3.1+
+// void callbackDispatcher() async {
+//   Workmanager().executeTask((task, inputData) async {
+//     final db = Provider.of<AppDatabase>(Mainframe.navigatorKey.currentContext!,
+//         listen: false);
+//     var url = inputData!['url'];
+//     var videoUrl = inputData['videoUrl'];
 
-    var responseurl = load(url, (progress) async {
-      debugPrint('File  download progress is - $progress}');
+//     var responseurl = load(url, (progress) async {
+//       debugPrint('File  download progress is - $progress}');
 
-      if (progress < 100) {
-        ShowNotification().updateNotification('1', progress.round());
-      } else {
-        ShowNotification().cancelNotification();
-        await ShowNotification().showPublicNotification(url);
-      }
+//       if (progress < 100) {
+//         ShowNotification().updateNotification('1', progress.round());
+//       } else {
+//         ShowNotification().cancelNotification();
+//         await ShowNotification().showPublicNotification(url);
+//       }
 
-      await db.updateRecord(
-        Record(id: id, downloaded: progress, url: url),
-      );
-    });
-    debugPrint('after downloading url is - ${await responseurl}');
-    // DownloadQueue.add(() => responseurl);
+//       await db.updateRecord(
+//         Record(id: id, downloaded: progress, url: url),
+//       );
+//     });
+//     debugPrint('after downloading url is - ${await responseurl}');
+//     // DownloadQueue.add(() => responseurl);
 
-    return Future(() => true);
-  });
-}
+//     return Future(() => true);
+//   });
+// }
 
 Future<void> initializeService() async {
   final service = FlutterBackgroundService();
@@ -336,26 +374,41 @@ void onStart(ServiceInstance service) async {
   /// OPTIONAL when use custom notification
   var flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
+  http.CancellationToken? token;
+  double? progressGlobal;
+
   service.on('download').listen((event) async {
+    debugPrint('download function is invoked');
     var url = event!['url'];
     var id = event['id'];
+    token = http.CancellationToken();
 
-    var responseurl = load(url, (progress) async {
-      debugPrint('File  download progress is - $progress}');
+    await load(url, token!, (progress) async {
+      debugPrint('File  download progress is - $progress id is $id');
+      progressGlobal = progress;
+      await AppDatabase().updateRecord(Record(
+          id: int.parse(id.toString()),
+          url: url,
+          downloaded: double.parse(progress.toString())));
 
       service.invoke(
         'update',
         {'progress': progress, 'done': false, 'id': id, 'url': url},
       );
-      ShowNotification().updateNotification('1', progress.round());
+      var payload = '{ "url":"$url", "id":"$id"}';
+      ShowNotification().updateNotification(
+          int.parse(id.toString()), progress.round(), false, payload);
       if (progress == 100) {
-        ShowNotification().cancelNotification();
+        ShowNotification().cancelNotification(int.parse(id.toString()));
         await ShowNotification().showPublicNotification(url);
-        await service.stopSelf();
+        // await service.stopSelf();
       }
-    }).then((value) {
+    }).then((value) async {
       debugPrint('after file download is done - $value');
-      DownloadQueue.add(() => Future(() => value));
+      if (value != null) {
+        DownloadQueue.add(() => Future(() => value));
+      }
+      await service.stopSelf();
       // service.invoke(
       //   'update',
       //   {'done': true, 'responseurl': value, 'id': id},
@@ -365,12 +418,71 @@ void onStart(ServiceInstance service) async {
   });
 
   // if (service is AndroidServiceInstance) {
-  service.on('setAsForeground').listen((event) {
-    // service.setAsForegroundService();
+  service.on('cancelDownload').listen((event) async {
+    var url = event!['url'];
+    var id = event['id'];
+    var payload = '''{
+        "url":$url,
+        "id":$id
+      }''';
+    if (token != null) {
+      token!.cancel();
+    }
+    // ShowNotification()
+    //     .updateNotification(id, progressGlobal!.round(), true, payload);
+    ShowNotification().cancelNotification(int.parse(id));
+    await service.stopSelf();
   });
 
-  service.on('setAsBackground').listen((event) {
-    // service.setAsBackgroundService();
+  service.on('pauseDownload').listen((event) {
+    if (token != null) {
+      token!.cancel();
+    }
+
+    var url = event!['url'];
+    var id = event['id'];
+    var payload = '{ "url":"$url", "id":"$id"}';
+    ShowNotification().updateNotification(
+        int.parse(id), progressGlobal!.round(), true, payload);
+  });
+
+  service.on('resumeDownload').listen((event) async {
+    var url = event!['url'];
+    var id = event['id'];
+    token = http.CancellationToken();
+
+    await load(url, token!, (progress) async {
+      debugPrint('File  download progress is - $progress');
+      progressGlobal = progress;
+      await AppDatabase().updateRecord(Record(
+          id: id, url: url, downloaded: double.parse(progress.toString())));
+
+      service.invoke(
+        'update',
+        {'progress': progress, 'done': false, 'id': id, 'url': url},
+      );
+      var payload = '''{
+        "url":$url,
+        "id":$id
+      }''';
+      ShowNotification()
+          .updateNotification(int.parse(id), progress.round(), false, payload);
+      if (progress == 100) {
+        ShowNotification().cancelNotification(int.parse(id));
+        await ShowNotification().showPublicNotification(url);
+        // await service.stopSelf();
+      }
+    }).then((value) async {
+      debugPrint('after file download is done - $value');
+      if (value != null) {
+        DownloadQueue.add(() => Future(() => value));
+      }
+      await service.stopSelf();
+      // service.invoke(
+      //   'update',
+      //   {'done': true, 'responseurl': value, 'id': id},
+      // );
+    });
   });
   // }
 

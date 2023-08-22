@@ -39,6 +39,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
 
     var file = File(widget.path);
 
+    debugPrint('File path of video is - ${widget.path}');
+
     var dataSource = BetterPlayerDataSource.file(
       file.path, /* videoExtension: 'm3u8' */
     );
